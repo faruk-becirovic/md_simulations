@@ -23,7 +23,7 @@ module load GROMACS
 
 # 1. Clean and prepare the PDB structure
 echo "Step 1: Cleaning PDB structure..."
-gmx pdb2gmx -f $INPUT_PDB -o input/processed.gro -p topology/topol.top -i topology/posre.itp << EOF
+gmx pdb2gmx -ignh -f $INPUT_PDB -o input/processed.gro -p topology/topol.top -i topology/posre.itp << EOF
 1
 1
 EOF

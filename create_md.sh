@@ -4,7 +4,7 @@
 # Usage: ./create_mdp_files.sh complex_number
 
 COMPLEX_NUM=$1
-WORKDIR="/usr/home/md_simulations/complex_${COMPLEX_NUM}"
+WORKDIR="/home/faruk/md_simulations/complex_${COMPLEX_NUM}"
 
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <complex_number>"
