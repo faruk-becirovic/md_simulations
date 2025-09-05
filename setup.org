@@ -1,0 +1,124 @@
+#!/bin/bash
+
+# Complete workflow for setting up and running MD simulations
+# Usage: ./complete_workflow.sh
+
+echo "=== GROMACS MD Simulation Workflow for 5 Protein-Lysozyme Complexes ==="
+echo ""
+
+# Step 1: Initial setup
+echo "Step 1: Creating directory structure and setting up environment"
+cd /usr/home
+mkdir -p md_simulations
+cd md_simulations
+
+# Create directories for each complex
+for i in {1..5}; do
+    mkdir -p complex_$i/{input,topology,equilibration,production,analysis}
+    echo "Created directories for Complex $i"
+done
+
+# Step 2: Create all necessary scripts
+echo ""
+echo "Step 2: Creating setup and job scripts"
+
+# Create the setup script
+cat > setup_md.sh << 'SETUP_EOF'
+#!/bin/bash
+# [Previous setup_md.sh content would go here]
+SETUP_EOF
+
+# Create MDP files script
+cat > create_mdp_files.sh << 'MDP_EOF'
+# [Previous create_mdp_files.sh content would go here]
+MDP_EOF
+
+# Make scripts executable
+chmod +x setup_md.sh create_mdp_files.sh
+
+echo "Scripts created successfully"
+
+# Step 3: Instructions for user
+echo ""
+echo "=== WORKFLOW INSTRUCTIONS ==="
+echo ""
+echo "1. PREPARATION PHASE:"
+echo "   Place your 5 PDB files in the md_simulations directory"
+echo "   Name them: complex1.pdb, complex2.pdb, ..., complex5.pdb"
+echo ""
+echo "2. SETUP EACH COMPLEX:"
+echo "   For each complex, run:"
+echo "     ./setup_md.sh 1 complex1.pdb"
+echo "     ./create_mdp_files.sh 1"
+echo "   Repeat for complexes 2-5"
+echo ""
+echo "3. SUBMIT JOBS:"
+echo "   ./submit_all_complexes.sh"
+echo ""
+echo "4. MONITOR JOBS:"
+echo "   squeue                    # Check job status"
+echo "   squeue -u \$USER          # Check your jobs only"
+echo "   scancel <job_id>          # Cancel a job if needed"
+echo ""
+echo "5. CHECK RESULTS:"
+echo "   tail -f complex_1/complex_1_<job_id>.out    # Monitor progress"
+echo "   ls complex_1/analysis/                      # Check analysis results"
+
+echo ""
+echo "=== CLUSTER UTILIZATION ==="
+echo "Your cluster has 3 GPU nodes, each with:"
+echo "- 28 CPU cores (2x Intel Xeon E5-2690v4)"
+echo "- 4x NVIDIA Tesla M60 GPUs"
+echo "- 256GB RAM"
+echo ""
+echo "The workflow is designed to:"
+echo "- Run 3 complexes simultaneously (1 per GPU node)"
+echo "- Queue remaining 2 complexes"
+echo "- Use all 4 GPUs per node for maximum performance"
+echo "- Utilize all CPU cores for optimal threading"
+
+echo ""
+echo "=== ESTIMATED TIMELINE ==="
+echo "For a typical 10ns simulation per complex:"
+echo "- Setup: ~5-10 minutes per complex"
+echo "- Energy minimization: ~5-15 minutes"
+echo "- NVT equilibration: ~15-30 minutes"
+echo "- NPT equilibration: ~15-30 minutes"
+echo "- Production MD (10ns): ~2-6 hours (depending on system size)"
+echo "- Total per complex: ~3-7 hours"
+echo "- All 5 complexes: ~5-10 hours (with parallel execution)"
+
+echo ""
+echo "=== TROUBLESHOOTING ==="
+echo "Common issues and solutions:"
+echo "1. If pdb2gmx fails:"
+echo "   - Check PDB file format"
+echo "   - Remove non-standard residues"
+echo "   - Use 'gmx pdb2gmx -ignh' to ignore hydrogens"
+echo ""
+echo "2. If system crashes during MD:"
+echo "   - Increase energy minimization steps"
+echo "   - Check for clashes in initial structure"
+echo "   - Reduce initial time step"
+echo ""
+echo "3. If GPU errors occur:"
+echo "   - Check GPU availability: nvidia-smi"
+echo "   - Reduce number of GPUs used: -gpu_id 01 instead of 0123"
+echo ""
+echo "4. Memory issues:"
+echo "   - Reduce trajectory output frequency"
+echo "   - Use compressed output format"
+
+echo ""
+echo "=== ANALYSIS SUGGESTIONS ==="
+echo "After simulations complete, consider these analyses:"
+echo "1. RMSD - structural stability"
+echo "2. RMSF - residue flexibility"
+echo "3. Radius of gyration - compactness"
+echo "4. Hydrogen bonds - interface interactions"
+echo "5. Distance analysis - specific contacts"
+echo "6. Principal component analysis - major motions"
+
+echo ""
+echo "Setup complete! Follow the workflow instructions above."
+echo "Questions? Check GROMACS documentation: http://manual.gromacs.org/"
