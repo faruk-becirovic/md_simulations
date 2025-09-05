@@ -1,140 +1,72 @@
 #!/bin/bash
 
-# User-aware setup for GROMACS MD simulations
-# This script detects the correct user and paths
+# GROMACS MD Simulation Setup Script for Protein-Lysozyme Complexes
+# Usage: ./setup_md.sh complex_number input_pdb_file
 
-echo "=== GROMACS MD Simulation Setup ==="
-echo ""
+COMPLEX_NUM=$1
+INPUT_PDB=$2
 
-# Check current user and setup paths accordingly
-CURRENT_USER=$(whoami)
-echo "Current user: $CURRENT_USER"
-
-if [ "$CURRENT_USER" = "root" ]; then
-    echo "Warning: You're running as root user"
-    echo "It's recommended to use the 'faruk' user for this work"
-    echo ""
-    echo "Switch to faruk user with:"
-    echo "su - faruk"
-    echo ""
-    echo "Or if you want to continue as root, we'll use /home/faruk as the working directory"
-    WORK_BASE="/home/faruk"
-elif [ "$CURRENT_USER" = "faruk" ]; then
-    echo "✓ Running as faruk user - this is recommended"
-    WORK_BASE="/home/faruk"
-else
-    echo "Running as user: $CURRENT_USER"
-    WORK_BASE="/home/$CURRENT_USER"
-fi
-
-echo "Working base directory: $WORK_BASE"
-echo ""
-
-# Check if base directory exists and is writable
-if [ ! -d "$WORK_BASE" ]; then
-    echo "Error: Base directory $WORK_BASE does not exist!"
+if [ $# -ne 2 ]; then
+    echo "Usage: $0 <complex_number> <input_pdb_file>"
     exit 1
 fi
 
-if [ ! -w "$WORK_BASE" ]; then
-    echo "Error: Cannot write to $WORK_BASE"
-    echo "Check permissions or switch to the correct user"
-    exit 1
-fi
+# Set working directory
+WORKDIR="/home/faruk/md_simulations/complex_${COMPLEX_NUM}"
+cd $WORKDIR
 
-# Set up the simulation directory
-SIMULATION_DIR="$WORK_BASE/md_simulations"
+echo "Setting up MD simulation for Complex $COMPLEX_NUM"
+echo "Working directory: $WORKDIR"
 
-echo "Creating simulation directory structure..."
-mkdir -p "$SIMULATION_DIR"
-cd "$SIMULATION_DIR"
+# Load GROMACS module
+module load GROMACS
 
-# Create directories for each complex
-for i in {1..5}; do
-    mkdir -p "complex_$i"/{input,topology,equilibration,production,analysis}
-    echo "✓ Created complex_$i directories"
-done
-
-echo ""
-echo "Directory structure created successfully!"
-echo "Simulation directory: $SIMULATION_DIR"
-echo ""
-
-# Create a configuration file for other scripts to use
-cat > config.sh << EOF
-#!/bin/bash
-# Configuration file for MD simulation scripts
-WORK_BASE="$WORK_BASE"
-SIMULATION_DIR="$SIMULATION_DIR"
-CURRENT_USER="$CURRENT_USER"
+# 1. Clean and prepare the PDB structure
+echo "Step 1: Cleaning PDB structure..."
+gmx pdb2gmx -f $INPUT_PDB -o input/processed.gro -p topology/topol.top -i topology/posre.itp << EOF
+1
+1
 EOF
 
-echo "Configuration saved to: $SIMULATION_DIR/config.sh"
-echo ""
+# 2. Define simulation box
+echo "Step 2: Defining simulation box..."
+gmx editconf -f input/processed.gro -o input/newbox.gro -c -d 1.0 -bt cubic
 
-# Check SLURM configuration based on user
-echo "=== SLURM Configuration Check ==="
+# 3. Solvate the system
+echo "Step 3: Adding water molecules..."
+gmx solvate -cp input/newbox.gro -cs spc216.gro -o input/solv.gro -p topology/topol.top
 
-# Check if we can access SLURM
-if command -v sinfo &> /dev/null; then
-    echo "✓ SLURM is available"
-    echo "Available partitions:"
-    sinfo -s
-    echo ""
-    echo "Available nodes:"
-    sinfo -N
-else
-    echo "✗ SLURM commands not available"
-    echo "You may need to:"
-    echo "1. Login to the login node (192.168.10.102)"
-    echo "2. Check if SLURM is properly configured"
-fi
+# 4. Add ions for neutralization
+echo "Step 4: Adding ions..."
+# Create ions.mdp file
+cat > input/ions.mdp << 'MDP_EOF'
+; ions.mdp - used as input into grompp to generate ions.tpr
+integrator      = steep         ; Algorithm (steep = steepest descent minimization)
+emtol           = 1000.0        ; Stop minimization when the maximum force < 1000.0 kJ/mol/nm
+emstep          = 0.01          ; Energy minimization step size
+nsteps          = 50000         ; Maximum number of (minimization) steps to perform
+energygrps      = System        ; Which energy group(s) to write to disk
+MDP_EOF
 
-echo ""
-echo "=== Next Steps ==="
-echo "1. Place your PDB files in: $SIMULATION_DIR/"
-echo "   Name them: complex1.pdb, complex2.pdb, ..., complex5.pdb"
-echo ""
-echo "2. Update the setup scripts with the correct paths:"
-echo "   - All scripts now use: $SIMULATION_DIR"
-echo ""
-echo "3. Run setup for each complex:"
-echo "   cd $SIMULATION_DIR"
-echo "   ./setup_md.sh 1 complex1.pdb"
-echo ""
-echo "4. If running as root, consider switching to faruk user:"
-echo "   su - faruk"
-echo "   cd $SIMULATION_DIR"
+# Generate tpr file for adding ions
+gmx grompp -f input/ions.mdp -c input/solv.gro -p topology/topol.top -o input/ions.tpr
 
-# Check NFS mount points mentioned in documentation
-echo ""
-echo "=== Storage Check ==="
-if [ -d "/usr/local" ]; then
-    echo "✓ /usr/local exists (mentioned in documentation for software)"
-else
-    echo "⚠ /usr/local not found - check NFS mounts"
-fi
-
-# Check if we're on the right node
-echo ""
-echo "=== Node Information ==="
-echo "Hostname: $(hostname)"
-echo "IP address: $(hostname -I | awk '{print $1}')"
-
-case "$(hostname -I | awk '{print $1}')" in
-    "192.168.10.102")
-        echo "✓ You're on the login node - correct for setup"
-        ;;
-    "192.168.10.10")
-        echo "ℹ You're on the main server"
-        ;;
-    "192.168.10.11"|"192.168.10.12"|"192.168.10.13")
-        echo "ℹ You're on a compute node"
-        ;;
-    *)
-        echo "ℹ Unknown node - check your connection"
-        ;;
-esac
+# Add ions (choosing solvent group, typically group 13)
+gmx genion -s input/ions.tpr -o input/solv_ions.gro -p topology/topol.top -pname NA -nname CL -neutral << EOF
+13
+EOF
 
 echo ""
-echo "Setup complete!"
+echo "========================================="
+echo "System preparation completed for Complex $COMPLEX_NUM"
+echo "========================================="
+echo "Files created:"
+echo "  - Topology: topology/topol.top"
+echo "  - Final coordinates: input/solv_ions.gro"
+echo "  - Position restraints: topology/posre.itp"
+echo ""
+echo "Next steps:"
+echo "1. Run: ./create_mdp_files.sh $COMPLEX_NUM"
+echo "2. Check the files and adjust parameters if needed"
+echo "3. Submit the job: sbatch run_md_complex_${COMPLEX_NUM}.slurm"
+echo ""
